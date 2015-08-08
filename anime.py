@@ -4,7 +4,6 @@ import httplib
 import logging
 from random import randint
 import re
-import sys
 import urllib2
 
 MIN_ID=1
@@ -27,9 +26,11 @@ class Anime(object):
 # Returns 'None' if:
 #   - the entry corresponding to this id does not exist, OR
 #   - this id represents a Manga entry, OR
+#   - this id represents a movie entry, an OAV or a special
+#     and |includeOneShots| is false, OR
 #   - if the anime does not have any associated rating attribute, OR
 #   - either the arithmetic or the weighted mean is lower than |threshold|.
-def getAnime(animeId, threshold):
+def getAnime(animeId, threshold, includeOneShots):
   url = "http://www.animenewsnetwork.com/encyclopedia/anime.php?id=%s" % str(animeId)
   try: 
     response = urllib2.urlopen(url)
@@ -40,6 +41,12 @@ def getAnime(animeId, threshold):
     # Exclude manga entries.
     if 'manga' in title:
       return None
+
+    # Exclude movie entries, OAVs and specials if required.
+    if not includeOneShots:
+      excludeText = re.findall(b'(OAV)|(movie)|(special)', title)
+      if excludeText is not None:
+        return None
     
     ratingText =  parsedHtml.find("div", {"id": "ratingbox"})
     # Exclude entries with no ratings.
@@ -71,17 +78,27 @@ def getRandomId():
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
-  parser.add_argument('--threshold', required=True, type=int, help="Minimum allowed rating as per AnimeNewsNetwork (ANN)")
+  parser.add_argument('--threshold', required=True, type=int,
+      help="Minimum allowed rating as per AnimeNewsNetwork (ANN)")
+  parser.add_argument('--limit', type=int, default=10,
+      help="Maximum number of recommendations. Default: 10")
+  parser.add_argument('--include_one_shots', dest='one_shots', action='store_true', default=False,
+      help='Whether to include movie titles, OAVs and special episodes in the results')
+
   args = parser.parse_args()
   print "Threshold: %s" % args.threshold
+  print "Limit: %s" % args.limit
+  print "Include one shots: %s" % args.one_shots
 
   visited = set()
-  while (True):
+  count=0
+  while (count<args.limit):
     animeId = getRandomId()
     if (animeId in visited):
       continue
     visited.add(animeId)
-    anime = getAnime(animeId, args.threshold)
+    anime = getAnime(animeId, args.threshold, args.one_shots)
     if anime is None:
       continue
     print str(anime.__dict__)
+    count+=1
