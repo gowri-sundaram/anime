@@ -40,34 +40,38 @@ def getAnime(animeId, threshold, includeOneShots):
     title =  parsedHtml.find("div", {"id": "page-title"}).find("h1", {"id": "page_header"}).contents[0]
     # Exclude manga entries.
     if 'manga' in title:
+      logging.warning('Excluding manga, title=%s' % title)
       return None
 
     # Exclude movie entries, OAVs and specials if required.
     if not includeOneShots:
       excludeText = re.findall(b'(OAV)|(movie)|(special)', title)
-      if excludeText is not None:
+      if excludeText:
+        logging.warning('Excluding %s, title=%s' % (str(excludeText), title))
         return None
     
     ratingText =  parsedHtml.find("div", {"id": "ratingbox"})
     # Exclude entries with no ratings.
     if ratingText is None:
+      logging.warning('No rating found, title=%s' % title)
       return None
 
     arithmeticMean = float(re.findall(b'<b>Arithmetic mean:</b> (\d+.\d+)', str(ratingText))[0]);
     weightedMean = float(re.findall(b'<b>Weighted mean:</b> (\d+.\d+)', str(ratingText))[0]);
     # Exclude entries with low ratings.
     if arithmeticMean < threshold or weightedMean < threshold:
+      logging.warning('Excluding unpopular anime, title=%s' % title)
       return None
 
     anime = Anime(animeId, title, arithmeticMean, weightedMean)
     return anime
 
   except urllib2.HTTPError, e:
-    logging.warning('HTTPError = %s, animeId = %s' % (str(e.code), str(animeId)))
+    logging.warning('HTTPError=%s, animeId=%s' % (str(e.code), str(animeId)))
   except urllib2.URLError, e:
-    logging.warning('URLError = %s, animeId = %s' % (str(e.reason), str(animeId)))
+    logging.warning('URLError=%s, animeId=%s' % (str(e.reason), str(animeId)))
   except httplib.HTTPException, e:
-    logging.warning('HTTPException, animeId = %s' % str(animeId))
+    logging.warning('HTTPException, animeId=%s' % str(animeId))
   except Exception:
     import traceback
     logging.warning('generic exception: ' + traceback.format_exc())
@@ -83,7 +87,7 @@ if __name__ == "__main__":
   parser.add_argument('--limit', type=int, default=10,
       help="Maximum number of recommendations. Default: 10")
   parser.add_argument('--include_one_shots', dest='one_shots', action='store_true', default=False,
-      help='Whether to include movie titles, OAVs and special episodes in the results')
+      help='Whether to include movie titles, OAVs and special episodes in the results. Default: false')
 
   args = parser.parse_args()
   print "Threshold: %s" % args.threshold
@@ -91,6 +95,7 @@ if __name__ == "__main__":
   print "Include one shots: %s" % args.one_shots
 
   visited = set()
+  result = []
   count=0
   while (count<args.limit):
     animeId = getRandomId()
@@ -101,4 +106,12 @@ if __name__ == "__main__":
     if anime is None:
       continue
     print str(anime.__dict__)
+    result.append(anime)
     count+=1
+
+  print("......................................................");
+  print("               ***SUGGESTIONS ***");
+  print("......................................................");
+  for anime in result:
+    print str(anime.__dict__)
+
