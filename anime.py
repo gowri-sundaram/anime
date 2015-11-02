@@ -1,3 +1,4 @@
+#region Dependencies
 import argparse
 from bs4 import BeautifulSoup
 import httplib
@@ -6,36 +7,53 @@ import os
 from random import randint
 import re
 import urllib2
+#endregion Dependencies
 
+#region Defines
 MIN_ID=1
 MAX_ID=11000
+MAX_RECOMMENDATIONS = 3
+#endregion Defines
 
+################################################################################
+## anime.py
+##
+## Console application will take very anime arguments and recommend up to 3
+## very anime recommendations. Uses ANN database.
+################################################################################
+
+# Stores the meat of the anime
 class Anime(object):
+    def __init__ (self, id, title, arithmeticMean=None, weightedMean=None):
+        self.id = id
+        self.title = title
+        self.arithmeticMean = arithmeticMean
+        self.weightedMean = weightedMean
 
-  def __init__ (self, id, title, arithmeticMean=None, weightedMean=None):
-    self.id = id
-    self.title = title
-    self.arithmeticMean = arithmeticMean
-    self.weightedMean = weightedMean
+    def isManga(self):
+        return bool (re.findall (b'(manga)', self.title))
+    def isTV(self):
+        return bool (re.findall (b'(TV)|(special)', self.title))
+    def isOVA(self):
+        return bool (re.findall (b'(OVA)', self.title))
+    def isMovie(self):
+        return bool (re.findall (b'(movie)', self.title))
 
-  def isManga(self):
-    return "manga" in self.title
-
-  def isOneshot(self):
-    return bool(re.findall(b'(OAV)|(movie)|(special)', self.title))
-
-  def isPopular(self, threshold):
-    if not self.arithmeticMean or not self.weightedMean:
-      return False
-    return self.arithmeticMean >= threshold and self.weightedMean >= threshold
+    def isPopular(self, threshold):
+        if not self.arithmeticMean or not self.weightedMean:
+            return False
+        return self.arithmeticMean >= threshold and self.weightedMean >= threshold
 
 # Returns the Anime object represented by the anime id as per
 # Anime News Network (ANN).
 def getAnime(animeId):
   url = "http://www.animenewsnetwork.com/encyclopedia/anime.php?id=%s" % str(animeId)
   try: 
+    # Follow URL
     response = urllib2.urlopen(url)
+    # Get HTML page data
     html = response.read()
+    # Spruce up the soup
     parsedHtml = BeautifulSoup(html, "lxml")
 
     title =  parsedHtml.find("div", {"id": "page-title"}).find("h1", {"id": "page_header"}).contents[0]
@@ -59,88 +77,128 @@ def getAnime(animeId):
     logging.warning('generic exception: ' + traceback.format_exc())
 
 # Returns a random Integer between |MIN_ID| and |MAX_ID|, both inclusive.
-def getRandomId():
+def getRandomID():
   return randint(MIN_ID, MAX_ID)
 
-# Reads and returns a set of all lines in |filePath|.
-def readToSet(filePath):
-  result = set()
-  if (os.path.isfile(filePath)):
-    handle = open(filePath)
-    for animeId in handle.read().splitlines():
-      result.add(animeId)
-  return result
+############################ MAIN IS RIGHT HERE ################################
+#region Main
 
-# Writes all entries in |iterable| to |filePath|.
-def writeToFile(iterable, filePath):
-  with open(filePath, 'wb') as handle:
-    for entry in iterable:
-      handle.write(str(entry) + "\n")
+# Set up argument parser
+parser = argparse.ArgumentParser()
+parser.add_argument('--threshold', type=int, required=True,
+                    help="Minimum allowed rating as per AnimeNewsNetwork (ANN)")
+parser.add_argument ('--exclude_manga', dest='manga', action='store_false', default=True,
+                      help='Remove manga from the recommendations')
+parser.add_argument ('--exclude_TV', dest = 'TV', action = 'store_false', default = True,
+                     help = "Remove TV anime (including specials) from the recommendations")
+parser.add_argument ('--exclude_OVA', dest = 'OVA', action = 'store_false', default = True,
+                     help = "Remove OVAs from the recommendations")
+parser.add_argument ('--exclude_movie', dest = 'movie', action = 'store_false', default = True,
+                     help = "Remove movies from the recommendations")
 
-if __name__ == "__main__":
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--threshold', type=int, required=True,
-      help="Minimum allowed rating as per AnimeNewsNetwork (ANN)")
-  parser.add_argument('--limit', type=int, default=10,
-      help="Maximum number of recommendations. Default: 10")
-  parser.add_argument('--include_oneshots', dest='oneshots', action='store_true', default=False,
-      help='Whether to include movie titles, OAVs and special episodes in the results. Default: false')
-  parser.add_argument('--dir', default=os.path.dirname(os.path.abspath(__file__)),
-      help='Root directory to store excluded anime ids.')
+args = parser.parse_args(['--threshold', '4', '--exclude_TV'])
 
-  args = parser.parse_args()
-  print("Threshold: %s" % args.threshold)
-  print("Limit: %s" % args.limit)
-  print("Include one shots: %s" % args.oneshots)
-  print("Root directory: %s" % args.dir)
+print ('===========SETTINGS===========')
+print ('Minimum Rating:   %s' % args.threshold)
+print ('Include Manga:    %s' % args.manga)
+print ('Include TV Shows: %s' % args.TV)
+print ('Include OVAs:     %s' % args.OVA)
+print ('Include movies:   %s' % args.movie)
 
-  mangaExcludes = readToSet(os.path.join(args.dir, "manga_ids.txt"))
-  invalidExcludes = readToSet(os.path.join(args.dir, "invalid_ids.txt"))
-  oneshotExcludes = readToSet(os.path.join(args.dir, "oneshot_ids.txt"))
-  visited = set()
-  result = []
-  count=0
-  while (count<args.limit):
-    animeId = getRandomId()
-    if (animeId in mangaExcludes or animeId in invalidExcludes or animeId in visited):
-      continue
-    if (not args.oneshots and animeId in oneshotExcludes):
-      continue
+# The animes
+animes = list()
+# Loop var
+count = 0
+# Stores used ANN IDs
+usedID = list()
+# Flag for getting IDs
+getID = True
 
+print ("\n===SEARCHING FOR THE ANIMES===")
+
+# Loop while under the requested amount of recommendations
+while (count < MAX_RECOMMENDATIONS):
+    # Get an ANN ID
+    while (getID):
+        # Get random ANN ID 
+        animeId = getRandomID() 
+
+        # Check that you didn't already get that ID
+        for ID in usedID:
+            # Found an old ID; go back and get a new ID
+            if (animeId == ID):
+                break
+
+        # Did not find any old ID matches
+        getID = False
+    
+    # Save our ID in oldID since it's gonna be used
+    usedID.append(animeId)
+
+    # Get very anime information from ANN
     anime = getAnime(animeId)
-    # Filter out invalid anime ids.
+
+    # There is no ANN entry with the given ID; 
     if anime is None:
-      invalidExcludes.add(animeId)
-      logging.warning('Anime not found, id=%s' % animeId)
-      continue
-    # Filter out manga entries.
-    if anime.isManga(): 
-      mangaExcludes.add(animeId)
-      logging.warning('Excluding manga, title=%s' % anime.title)
-      continue
-    # Filter out oneshot entries, if required.
-    if anime.isOneshot():
-      oneshotExcludes.add(animeId)
-      if not args.oneshots:
-        logging.warning('Excluding oneshot, title=%s' % anime.title)
-        continue
-    # Filter out entries with a low rating.
-    if not anime.isPopular(args.threshold):
-      visited.add(animeId)
-      logging.warning('Excluding unpopular anime, title=%s' % anime.title)
-      continue
-    print str(anime.__dict__)
-    visited.add(animeId)
-    result.append(anime)
-    count+=1
+        # Log ID in usedID and try again
+        usedID.append(animeId)
+        getID = True
+    # If new ID is not requested
+    if (not getID):
+        # If the ID pointed to a manga
+        if anime.isManga():
+            # Check if user is ok with manga
+            if not args.manga:
+                # User is not ok; Log ID in usedID and try again
+                usedID.append (animeId)
+                getID = True
+    # If new ID is not requested
+    if (not getID):
+        # If the ID pointed to a TV series
+        if anime.isTV():
+            # Check if user is ok with TV series
+            if not args.TV:
+                # User is not ok; Log ID in usedID and try again
+                usedID.append (animeId)
+                getID = True
+    # If new ID is not requested
+    if (not getID):
+        # If the ID pointed to a OVAs
+        if anime.isOVA():
+            # Check if user is ok with OVAs
+            if not args.OVA:
+                # User is not ok; Log ID in usedID and try again
+                usedID.append (animeId)
+                getID = True
+    # If new ID is not requested
+    if (not getID):
+        # If the ID pointed to a movie
+        if anime.isMovie():
+            # Check if user is ok with movies
+            if not args.movie:
+                # User is not ok; Log ID in usedID and try again
+                usedID.append (animeId)
+                getID = True
+    # If new ID is not requested
+    if (not getID):
+         # If the ID pointed to an item below threshold
+        if not anime.isPopular(args.threshold):
+            # Log ID in usedID and try again
+            usedID.append (animeId)
+            getID = True
+    # Only increment if there was no premature new ID request
+    if (not getID):
+        print ("FOUND [%d of %d]" % (count + 1, MAX_RECOMMENDATIONS))
+        animes.append (anime)
+        getID = True
+        # Loop var
+        count+=1
 
-  print("......................................................");
-  print("               ***SUGGESTIONS ***");
-  print("......................................................");
-  for anime in result:
-    print str(anime.__dict__)
+print("\n......................................................");
+print("               ***SUGGESTIONS***");
+print("......................................................");
 
-  # Write ids back to respective files.
-  writeToFile(mangaExcludes, os.path.join(args.dir, "manga_ids.txt"))
-  writeToFile(invalidExcludes, os.path.join(args.dir, "invalid_ids.txt"))
-  writeToFile(oneshotExcludes, os.path.join(args.dir, "oneshot_ids.txt"))
+for anime in animes:
+    print (anime.title.encode('utf-8'))
+
+#endregion Main
