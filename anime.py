@@ -103,7 +103,7 @@ parser.add_argument ('--exclude_OVA', dest = 'OVA', action = 'store_false', defa
 parser.add_argument ('--exclude_movie', dest = 'movie', action = 'store_false', default = True,
                      help = "Remove movies from the recommendations")
 
-args = parser.parse_args(['--exclude_manga', '--max_rating', '4'])
+# args = parser.parse_args(['--exclude_manga', '--max_rating', '4'])
 
 print ('===========SETTINGS===========')
 print ('Minimum Rating:   %s' % args.min)
