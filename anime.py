@@ -169,14 +169,15 @@ print ('Include movies:   %s' % args.movie)
 
 # Read in all former used IDs
 oldIDs = readHistory (PATH)
-
-# The animes
+# Makes a list for all IDs used in this run of the program
+runIDs = list ()
+# Makes a list of all the to-be-recommended animes
 animes = list()
 # Loop var
 count = 0
 # Flag for getting IDs
 getID = True
-
+# Number of rejected animes during the currnet recommendation search
 totalRejects = 0
 print ("\n===SEARCHING FOR THE ANIMES===")
 
@@ -187,17 +188,26 @@ while (count < MAX_RECOMMENDATIONS):
         # Get random ANN ID 
         animeId = getRandomID() 
 
-        # Check that you didn't already get that ID
-        for ID in oldIDs:
+        # Check that this ID was not already generated this run
+        for ID in runIDs:
             # Found an old ID; go back and get a new ID
             if (animeId == ID):
-                break
-
-        # Did not find any old ID matches
-        getID = False
+                getID = False
+        # Check that this ID was not already used in a prior recommendation
+        for ID in oldIDs:
+            if (animeId == ID):
+                getID = False
+        
+        # getID is False, so the ID is old; get a new ID (keep loop going with getID = True)
+        if (getID == False):
+            getID = True
+        # getID is True, so the ID is NOT old; break out of the loop and continue
+        else:
+            # Did not find any old ID matches
+            getID = False
     
-    # Save our ID in oldID since it's gonna be used
-    oldIDs.append(animeId)
+    # Save our ID in runIDs as it is going to be used this run
+    runIDs.append(animeId)
 
     # Get very anime information from ANN
     anime = getAnime(animeId)
@@ -264,6 +274,8 @@ while (count < MAX_RECOMMENDATIONS):
     if (not getID):
         print ("FOUND [%d of %d]" % (count + 1, MAX_RECOMMENDATIONS))
         totalRejects = 0
+        # Adds the current ID to oldIDs as the user has had it recommended to them
+        oldIDs.append (animeId)
         animes.append (anime)
         getID = True
         # Loop var
