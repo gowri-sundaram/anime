@@ -152,7 +152,7 @@ parser.add_argument ('--exclude_OVA', dest = 'OVA', action = 'store_false', defa
 parser.add_argument ('--exclude_movie', dest = 'movie', action = 'store_false', default = True,
                      help = "Remove movies from the recommendations")
 
-args = parser.parse_args(['--exclude_manga'])
+# args = parser.parse_args(['--recommendations', '1'])
 
 # Do not allow more than MAX_RECOMMENDATIONS recs
 if (args.recs > MAX_RECOMMENDATIONS):
@@ -182,7 +182,7 @@ totalRejects = 0
 print ("\n===SEARCHING FOR THE ANIMES===")
 
 # Loop while under the requested amount of recommendations
-while (count < MAX_RECOMMENDATIONS):
+while (count < args.recs):
     # Get an ANN ID
     while (getID):
         # Get random ANN ID 
@@ -272,7 +272,7 @@ while (count < MAX_RECOMMENDATIONS):
             getID = True
     # Only increment if there was no premature new ID request
     if (not getID):
-        print ("FOUND [%d of %d]" % (count + 1, MAX_RECOMMENDATIONS))
+        print ("FOUND [%d of %d]" % (count + 1, args.recs))
         totalRejects = 0
         # Adds the current ID to oldIDs as the user has had it recommended to them
         oldIDs.append (animeId)
