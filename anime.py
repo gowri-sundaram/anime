@@ -13,6 +13,7 @@ import urllib2
 MIN_ID=1
 MAX_ID=11000
 MAX_RECOMMENDATIONS = 3
+PATH = 'anime - History'
 #endregion Defines
 
 ################################################################################
@@ -81,6 +82,52 @@ def getAnime(animeId):
         import traceback
         logging.warning('generic exception: ' + traceback.format_exc())
 
+def readHistory (path):
+    temp = list ()
+
+    pathFile = path + '/History.txt'
+
+    # Check if the directiory exists
+    if (not os.path.exists (path)):
+        # It does not exist, so create it
+        os.makedirs (path)
+
+    # Check if the file exists
+    if (not os.path.isfile (pathFile)):
+        # File does not exist, so make it
+        with open (pathFile, 'w') as f:
+            f.write ('0')
+        f.closed
+
+    # Open History and read in all IDs
+    with open (pathFile, 'r') as f:
+        for ID in f:
+            temp.append (ID.split('\n')[0])
+    f.closed
+
+    return (temp)
+
+def writeHistory (path, oldIDs):
+    pathFile = path + '/History.txt'
+
+    # Check if the directiory exists
+    if (not os.path.exists (path)):
+        # It does not exist, so create it
+        os.makedirs (path)
+
+    # Check if the file exists
+    if (not os.path.isfile (pathFile)):
+        # File does not exist, so make it
+        with open (pathFile, 'w') as f:
+            f.write ('0')
+        f.closed
+
+    # Open History and write all the values in there (overwriting everything)
+    with open (pathFile, 'w') as f:
+        for ID in oldIDs:
+            f.write (str(ID) + '\n')
+    f.closed
+
 # Returns a random Integer between |MIN_ID| and |MAX_ID|, both inclusive.
 def getRandomID():
     return randint(MIN_ID, MAX_ID)
@@ -94,6 +141,8 @@ parser.add_argument('--min_rating', dest = 'min', type = float,  default = 0.0,
                     help="Minimum allowed rating as per AnimeNewsNetwork (ANN)")
 parser.add_argument ('--max_rating', dest = 'max', type = float, default = 10.0,
                      help = "Maximim allowed rating as per AnimeNewsNetwork (ANN)")
+parser.add_argument ('--recommendations', dest = 'recs', type = int, default = 1,
+                     help = 'Number of recommendations the program will generate')
 parser.add_argument ('--exclude_manga', dest='manga', action='store_false', default=True,
                       help='Remove manga from the recommendations')
 parser.add_argument ('--exclude_TV', dest = 'TV', action = 'store_false', default = True,
@@ -103,9 +152,14 @@ parser.add_argument ('--exclude_OVA', dest = 'OVA', action = 'store_false', defa
 parser.add_argument ('--exclude_movie', dest = 'movie', action = 'store_false', default = True,
                      help = "Remove movies from the recommendations")
 
-# args = parser.parse_args(['--exclude_manga', '--max_rating', '4'])
+args = parser.parse_args(['--exclude_manga'])
+
+# Do not allow more than MAX_RECOMMENDATIONS recs
+if (args.recs > MAX_RECOMMENDATIONS):
+    args.recs = MAX_RECOMMENDATIONS
 
 print ('===========SETTINGS===========')
+print ('Recommendations:  %s' % args.recs)
 print ('Minimum Rating:   %s' % args.min)
 print ('Maximum Rating:   %s' % args.max)
 print ('Include Manga:    %s' % args.manga)
@@ -113,12 +167,13 @@ print ('Include TV Shows: %s' % args.TV)
 print ('Include OVAs:     %s' % args.OVA)
 print ('Include movies:   %s' % args.movie)
 
+# Read in all former used IDs
+oldIDs = readHistory (PATH)
+
 # The animes
 animes = list()
 # Loop var
 count = 0
-# Stores used ANN IDs
-usedID = list()
 # Flag for getting IDs
 getID = True
 
@@ -133,7 +188,7 @@ while (count < MAX_RECOMMENDATIONS):
         animeId = getRandomID() 
 
         # Check that you didn't already get that ID
-        for ID in usedID:
+        for ID in oldIDs:
             # Found an old ID; go back and get a new ID
             if (animeId == ID):
                 break
@@ -142,7 +197,7 @@ while (count < MAX_RECOMMENDATIONS):
         getID = False
     
     # Save our ID in oldID since it's gonna be used
-    usedID.append(animeId)
+    oldIDs.append(animeId)
 
     # Get very anime information from ANN
     anime = getAnime(animeId)
@@ -150,7 +205,7 @@ while (count < MAX_RECOMMENDATIONS):
     # There is no ANN entry with the given ID; 
     if anime is None:
         # Log ID in usedID and try again
-        usedID.append(animeId)
+        oldIDs.append(animeId)
         getID = True
     # If new ID is not requested
     if (not getID):
@@ -162,7 +217,6 @@ while (count < MAX_RECOMMENDATIONS):
                 totalRejects += 1
                 print ("Rejected : %d\r" % totalRejects),
                 # User is not ok; Log ID in usedID and try again
-                usedID.append (animeId)
                 getID = True
     # If new ID is not requested
     if (not getID):
@@ -174,7 +228,6 @@ while (count < MAX_RECOMMENDATIONS):
                 totalRejects += 1
                 print ("Rejected : %d\r" % totalRejects),
                 # User is not ok; Log ID in usedID and try again
-                usedID.append (animeId)
                 getID = True
     # If new ID is not requested
     if (not getID):
@@ -186,7 +239,6 @@ while (count < MAX_RECOMMENDATIONS):
                 totalRejects += 1
                 print ("Rejected : %d\r" % totalRejects),
                 # User is not ok; Log ID in usedID and try again
-                usedID.append (animeId)
                 getID = True
     # If new ID is not requested
     if (not getID):
@@ -198,7 +250,6 @@ while (count < MAX_RECOMMENDATIONS):
                 totalRejects += 1
                 print ("Rejected : %d\r" % totalRejects),
                 # User is not ok; Log ID in usedID and try again
-                usedID.append (animeId)
                 getID = True
     # If new ID is not requested
     if (not getID):
@@ -208,7 +259,6 @@ while (count < MAX_RECOMMENDATIONS):
             totalRejects += 1
             print ("Rejected : %d\r" % totalRejects),
             # Log ID in usedID and try again
-            usedID.append (animeId)
             getID = True
     # Only increment if there was no premature new ID request
     if (not getID):
@@ -222,6 +272,8 @@ while (count < MAX_RECOMMENDATIONS):
 print("\n......................................................");
 print("               ***SUGGESTIONS***");
 print("......................................................");
+
+writeHistory(PATH, oldIDs)
 
 for anime in animes:
     print (anime.title.encode('utf-8'))
