@@ -14,44 +14,39 @@ MIN_ID=1
 MAX_ID=11000
 MAX_RECOMMENDATIONS = 3
 PATH = 'anime - History'
+ANN_PATH = 'http://cdn.animenewsnetwork.com/encyclopedia/api.xml?title='
 #endregion Defines
 
 ################################################################################
 ## anime.py
 ##
 ## Console application will take very anime arguments and recommend up to 3
-## very anime recommendations. Uses ANN database.
+## very anime recommendations. Uses ANN API.
 ################################################################################
 
 # Stores the meat of the anime
 class Anime(object):
-    def __init__ (self, id, title, arithmeticMean=None, weightedMean=None):
+    def __init__ (self, id, title, weightedMean=None, isManga=False, isTV=False, isOVA=False, isMovie=False):
         self.id = id
         self.title = title
-        self.arithmeticMean = arithmeticMean
         self.weightedMean = weightedMean
-
-    def isManga(self):
-        return bool (re.findall ('(manga)', self.title))
-    def isTV(self):
-        return bool (re.findall ('(TV)|(special)', self.title))
-    def isOVA(self):
-        return bool (re.findall ('(OVA)', self.title))
-    def isMovie(self):
-        return bool (re.findall ('(movie)', self.title))
+        self.isManga = isManga
+        self.isTV = isTV
+        self.isOVA = isOVA
+        self.isMovie = isMovie
 
     def validRating(self, min, max):
         # If there is not specified rating, it is not valid
-        if not self.arithmeticMean or not self.weightedMean:
+        if not self.weightedMean:
             return False
         # True only if both means are between [min, max]
-        return (self.arithmeticMean >= min and self.weightedMean >= min) and (self.arithmeticMean <= max and self.weightedMean <= max)
+        return (self.weightedMean >= min and self.weightedMean <= max)
 
 # Returns the Anime object represented by the anime id as per
 # Anime News Network (ANN).
 def getAnime(animeId):
-    url = "http://www.animenewsnetwork.com/encyclopedia/anime.php?id=%s" % str(animeId)
-  
+    url = ANN_PATH + str(animeId)
+
     try: 
         # Follow URL
         response = urllib2.urlopen(url)
@@ -60,17 +55,67 @@ def getAnime(animeId):
         # Spruce up the soup
         parsedHtml = BeautifulSoup(html, "lxml")
 
-        title =  parsedHtml.find("div", {"id": "page-title"}).find("h1", {"id": "page_header"}).contents[0]
-        ratingText =  parsedHtml.find("div", {"id": "ratingbox"})
-    
+        # Get tags <anime> and <manga>
+        parsedAnime = parsedHtml.find ("anime")
+        parsedManga = parsedHtml.find ("manga")
+
+        # Check if the <anime> tag exists on the page
+        if parsedAnime is None:
+            # Anime tag does not exist, so check for the <manga> tag instead
+            if parsedManga is None:
+                # Neither tag exists, so the ID must be a dead end
+                return (None)
+            # <manga> tags exists, find attributes of <manga>
+            else:
+                title = parsedManga ["name"]
+                itemType = parsedManga ["type"]
+        # <anime> tag exists, find attributes of <anime>
+        else:
+            # Check if the first tag after <ann> is anime or manga; if anime is not found, it has to be manga
+            title = parsedAnime ["name"]
+            itemType = parsedAnime ["type"]
+
+        if itemType == "manga":
+            isManga = True
+            isTV = False
+            isOVA = False
+            isMovie = False
+        elif itemType == "TV":
+            isManga = False
+            isTV = True
+            isOVA = False
+            isMovie = False
+        elif itemType == "OVA":
+            isManga = False
+            isTV = False
+            isOVA = True
+            isMovie = False
+        else:
+            isManga = False
+            isTV = False
+            isOVA = False
+            isMovie = True
+
+        # Get tag <ratings>
+        parsedRatings = parsedHtml.find ("ratings")
+
+        # Check if tag <ratings> exists
+        if parsedRatings is None:
+            # Does not exist, so there are no ratings
+            ratingText = None     
+        # Tag exists  
+        else:
+            # Get attribute
+            ratingText =  parsedRatings ['nb_votes']
+
         # Check if rating is specified.
         if ratingText is None:
             # Rating is not specified, so don't include it
-            return Anime(id=animeId, title=title)
+            return Anime(id=animeId, title=title, isManga=isManga, isTV=isTV, isOVA=isOVA, isMovie=isMovie)
         # Rating is specified, so include it
-        arithmeticMean = float(re.findall(b'<b>Arithmetic mean:</b> (\d+.\d+)', str(ratingText))[0]);
-        weightedMean = float(re.findall(b'<b>Weighted mean:</b> (\d+.\d+)', str(ratingText))[0]);
-        return Anime(animeId, title, arithmeticMean, weightedMean)
+        weightedMean = float(ratingText)
+
+        return Anime(animeId, title, weightedMean, isManga, isTV, isOVA, isMovie)
 
     except urllib2.HTTPError, e:
         logging.warning('HTTPError=%s, animeId=%s' % (str(e.code), str(animeId)))
@@ -152,7 +197,7 @@ parser.add_argument ('--exclude_OVA', dest = 'OVA', action = 'store_false', defa
 parser.add_argument ('--exclude_movie', dest = 'movie', action = 'store_false', default = True,
                      help = "Remove movies from the recommendations")
 
-# args = parser.parse_args(['--recommendations', '1'])
+# args = parser.parse_args(['--recommendations', '3', "--exclude_manga"])
 
 # Do not allow more than MAX_RECOMMENDATIONS recs
 if (args.recs > MAX_RECOMMENDATIONS):
@@ -220,7 +265,7 @@ while (count < args.recs):
     # If new ID is not requested
     if (not getID):
         # If the ID pointed to a manga
-        if anime.isManga():
+        if anime.isManga:
             # Check if user is ok with manga
             if not args.manga:
                 # Prints that the anime was rejected so that the user sees that something is going on
@@ -231,7 +276,7 @@ while (count < args.recs):
     # If new ID is not requested
     if (not getID):
         # If the ID pointed to a TV series
-        if anime.isTV():
+        if anime.isTV:
             # Check if user is ok with TV series
             if not args.TV:
                 # Prints that the anime was rejected so that the user sees that something is going on
@@ -242,7 +287,7 @@ while (count < args.recs):
     # If new ID is not requested
     if (not getID):
         # If the ID pointed to a OVAs
-        if anime.isOVA():
+        if anime.isOVA:
             # Check if user is ok with OVAs
             if not args.OVA:
                 # Prints that the anime was rejected so that the user sees that something is going on
@@ -253,7 +298,7 @@ while (count < args.recs):
     # If new ID is not requested
     if (not getID):
         # If the ID pointed to a movie
-        if anime.isMovie():
+        if anime.isMovie:
             # Check if user is ok with movies
             if not args.movie:
                 # Prints that the anime was rejected so that the user sees that something is going on
